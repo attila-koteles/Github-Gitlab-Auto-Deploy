@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-import json, urlparse, sys, os
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+import json, urllib.parse, sys, os
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from subprocess import call
 
 class GitAutoDeploy(BaseHTTPRequestHandler):
@@ -43,7 +43,7 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 	def parseRequest(self):
 		length = int(self.headers.getheader('content-length'))
 		body = self.rfile.read(length)
-		post = urlparse.parse_qs(body)
+		post = urllib.parse.parse_qs(body)
 		items = []
 		
 		# If payload is missing, we assume gitlab syntax.
@@ -75,8 +75,8 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 
 	def pull(self, path):
 		if(not self.quiet):
-			print "\nPost push request received"
-			print 'Updating ' + path
+			print("\nPost push request received")
+			print('Updating ' + path)
 		call(['cd "' + path + '" && git pull'], shell=True)
 
 	def deploy(self, path):
@@ -85,7 +85,7 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 			if(repository['path'] == path):
 				if 'deploy' in repository:
 					 if(not self.quiet):
-						 print 'Executing deploy command'
+						 print('Executing deploy command')
 					 call(['cd "' + path + '" && ' + repository['deploy']], shell=True)
 				break
 
@@ -106,21 +106,21 @@ def main():
 			os.setsid()
 
 		if(not GitAutoDeploy.quiet):
-			print 'Github & Gitlab Autodeploy Service v 0.1 started'
+			print('Github & Gitlab Autodeploy Service v 0.1 started')
 		else:
-			print 'Github & Gitlab Autodeploy Service v 0.1 started in daemon mode'
+			print('Github & Gitlab Autodeploy Service v 0.1 started in daemon mode')
 			 
 		server = HTTPServer(('', GitAutoDeploy.getConfig()['port']), GitAutoDeploy)
 		server.serve_forever()
 	except (KeyboardInterrupt, SystemExit) as e:
 		if(e): # wtf, why is this creating a new line?
-			print >> sys.stderr, e
+			print(e, file=sys.stderr)
 
 		if(not server is None):
 			server.socket.close()
 
 		if(not GitAutoDeploy.quiet):
-			print 'Goodbye'
+			print('Goodbye')
 
 if __name__ == '__main__':
 	 main()
