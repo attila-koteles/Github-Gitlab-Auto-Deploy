@@ -2,7 +2,7 @@
 
 import json, urlparse, sys, os
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-from subprocess import call
+import subprocess
 
 class GitAutoDeploy(BaseHTTPRequestHandler):
 
@@ -37,8 +37,9 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 		for url in urls:
 			paths = self.getMatchingPaths(url)
 			for path in paths:
-				self.pull(path)
-				self.deploy(path)
+				git_pull_output = self.pull(path)
+				deploy_output = self.deploy(path)
+				# notify hubot
 		self.respond()
 
 	def parseRequest(self):
@@ -81,17 +82,23 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 		if(not self.quiet):
 			print "\nPost push request received"
 			print 'Updating ' + path
-		call(['cd "' + path + '" && git pull'], shell=True)
+		# running process STDERR redirected to STDOUT
+		p = subprocess.Popen(['cd "' + path + '" && git pull'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+		out, err = p.communicate()
+		return out
 
 	def deploy(self, path):
 		config = self.getConfig()
 		for repository in config['repositories']:
 			if(repository['path'] == path):
 				if 'deploy' in repository:
-					 if(not self.quiet):
-						 print 'Executing deploy command'
-					 call(['cd "' + path + '" && ' + repository['deploy']], shell=True)
+					if(not self.quiet):
+					 	print 'Executing deploy command'
+					p = subprocess.Popen(['cd "' + path + '" && ' + repository['deploy']], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+					out, err = p.communicate()
+					return out
 				break
+		return "" # empty - if no deploy script - so no output either
 
 def main():
 	try:
