@@ -2,7 +2,7 @@
 
 import json, urlparse, sys, os
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-from subprocess import call
+import subprocess
 
 class GitAutoDeploy(BaseHTTPRequestHandler):
 
@@ -37,8 +37,11 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 		for url in urls:
 			paths = self.getMatchingPaths(url)
 			for path in paths:
-				self.pull(path)
-				self.deploy(path)
+				git_pull_output = self.pull(path)
+				deploy_output = self.deploy(path)
+				if self.is_gmail_enabled():
+					self.send_gmail(url, path, git_pull_output, deploy_output)
+
 		self.respond()
 
 	def parseRequest(self):
@@ -81,17 +84,62 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 		if(not self.quiet):
 			print "\nPost push request received"
 			print 'Updating ' + path
-		call(['cd "' + path + '" && git pull'], shell=True)
+		# running process STDERR redirected to STDOUT
+		p = subprocess.Popen(['cd "' + path + '" && git pull'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+		out, err = p.communicate()
+		return out
 
 	def deploy(self, path):
 		config = self.getConfig()
 		for repository in config['repositories']:
 			if(repository['path'] == path):
 				if 'deploy' in repository:
-					 if(not self.quiet):
-						 print 'Executing deploy command'
-					 call(['cd "' + path + '" && ' + repository['deploy']], shell=True)
+					if(not self.quiet):
+						print 'Executing deploy command'
+					p = subprocess.Popen(['cd "' + path + '" && ' + repository['deploy']], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+					out, err = p.communicate()
+					return out
 				break
+		return "" # empty - if no deploy script - so no output either
+
+	def is_gmail_enabled(self):
+		return 'gmail' in self.getConfig().keys()
+
+	def send_gmail(self, url, path, git_pull_output, deploy_output):
+		import smtplib
+		import textwrap
+		import socket
+
+		config = self.getConfig()
+		gmail_config = config['gmail']
+
+		message = """\
+From: %s
+To: %s
+Subject: Gitlab deploy (%s)
+
+Deploying: %s -> %s
+
+Git pull output:
+%s
+
+Deploy output:
+%s
+""" % (gmail_config['username'],", ".join(gmail_config['recipients']), url, url, path, git_pull_output, deploy_output)
+
+		try:
+			server = smtplib.SMTP('smtp.gmail.com:587')
+			server.ehlo()
+			server.starttls()
+			server.login(gmail_config['username'], gmail_config['password'])
+			server.sendmail(gmail_config['username'], gmail_config['recipients'], message)
+			server.close()
+			if (not self.quiet):
+				print 'successfully sent the mail'
+		except socket.error as e:
+			print "socket error - firewall?"
+		except:
+		    print "failed to send mail"
 
 def main():
 	try:
