@@ -33,8 +33,9 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 		return myClass.config
 
 	def do_POST(self):
-		urls = self.parseRequest()
-		for url in urls:
+		responses = self.parseRequest()
+		for response in responses:
+			url = response['repository']['url']
 			paths = self.getMatchingPaths(url)
 			for path in paths:
 				git_pull_output = self.pull(path)
@@ -54,13 +55,13 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 		if not 'payload' in post:
 			response = json.loads(body)
 			if 'repository' in body:
-				items.append(response['repository']['url'])
+				items.append(response)
 
 		# Otherwise, we assume github syntax.
 		else:
 			for itemString in post['payload']:
 				item = json.loads(itemString)
-				items.append(item['repository']['url'])
+				items.append(item)
 
 		return items
 
