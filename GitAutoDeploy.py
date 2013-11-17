@@ -33,14 +33,15 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 		return myClass.config
 
 	def do_POST(self):
-		urls = self.parseRequest()
-		for url in urls:
+		responses = self.parseRequest()
+		for response in responses:
+			url = response['repository']['url']
 			paths = self.getMatchingPaths(url)
 			for path in paths:
 				git_pull_output = self.pull(path)
 				deploy_output = self.deploy(path)
 				if self.is_gmail_enabled():
-					self.send_gmail(url, path, git_pull_output, deploy_output)
+					self.send_gmail(response, path, git_pull_output, deploy_output)
 
 		self.respond()
 
@@ -54,13 +55,13 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 		if not 'payload' in post:
 			response = json.loads(body)
 			if 'repository' in body:
-				items.append(response['repository']['url'])
+				items.append(response)
 
 		# Otherwise, we assume github syntax.
 		else:
 			for itemString in post['payload']:
 				item = json.loads(itemString)
-				items.append(item['repository']['url'])
+				items.append(item)
 
 		return items
 
@@ -105,34 +106,38 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 	def is_gmail_enabled(self):
 		return 'gmail' in self.getConfig().keys()
 
-	def send_gmail(self, url, path, git_pull_output, deploy_output):
+	def send_gmail(self, response, path, git_pull_output, deploy_output):
 		import smtplib
-		import textwrap
 		import socket
 
 		config = self.getConfig()
 		gmail_config = config['gmail']
 
-		message = """\
-From: %s
-To: %s
-Subject: Gitlab deploy (%s)
+		url = response['repository']['url']
+		commits = response['commits']
+		push_user = response['user_name']
+		repo_name = response['repository']['name']
 
-Deploying: %s -> %s
+		message  = "From: %s\n" % gmail_config['username']
+		message += "To: %s\n" % (", ".join(gmail_config['recipients']))
+		message += "Content-Type: text/plain; charset=utf-8\n"
+		message += "Subject: Gitlab deploy (%s -> %s)\n\n" % (push_user, repo_name) # note: double line break
+		message += "Deploying: %s -> %s\n\n" % (url, path)
 
-Git pull output:
-%s
+		for commit in commits:
+			message += "%s\n" % commit['url']
+			message += "%s (%s):\n" % (commit['author']['name'], commit['timestamp'])
+			message += "%s\n\n" % commit['message'] # double line-end
 
-Deploy output:
-%s
-""" % (gmail_config['username'],", ".join(gmail_config['recipients']), url, url, path, git_pull_output, deploy_output)
+		message += git_pull_output + "\n\n"
+		message += deploy_output
 
 		try:
 			server = smtplib.SMTP('smtp.gmail.com:587')
 			server.ehlo()
 			server.starttls()
 			server.login(gmail_config['username'], gmail_config['password'])
-			server.sendmail(gmail_config['username'], gmail_config['recipients'], message)
+			server.sendmail(gmail_config['username'], gmail_config['recipients'], message.encode('utf-8'))
 			server.close()
 			if (not self.quiet):
 				print 'successfully sent the mail'
