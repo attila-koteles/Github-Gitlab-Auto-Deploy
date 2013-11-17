@@ -107,25 +107,17 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 
 	def send_gmail(self, url, path, git_pull_output, deploy_output):
 		import smtplib
-		import textwrap
 		import socket
 
 		config = self.getConfig()
 		gmail_config = config['gmail']
 
-		message = """\
-From: %s
-To: %s
-Subject: Gitlab deploy (%s)
-
-Deploying: %s -> %s
-
-Git pull output:
-%s
-
-Deploy output:
-%s
-""" % (gmail_config['username'],", ".join(gmail_config['recipients']), url, url, path, git_pull_output, deploy_output)
+		message  = "From: %s\n" % gmail_config['username']
+		message += "To: %s\n" % (", ".join(gmail_config['recipients']))
+		message += "Subject: Gitlab deploy (%s)\n\n" % url # note: double line break
+		message += "Deploying: %s -> %s\n\n" % (url, path)
+		message += git_pull_output + "\n\n"
+		message += deploy_output
 
 		try:
 			server = smtplib.SMTP('smtp.gmail.com:587')
