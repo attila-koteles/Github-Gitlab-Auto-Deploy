@@ -33,18 +33,18 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 		return myClass.config
 
 	def do_POST(self):
-		responses = self.parseRequest()
-		for response in responses:
-			url = response['repository']['url']
-			ref = response['ref']
+		requests = self.parseRequest()
+		self.respond() # we respond quickly to gitlab/github
+		for request in requests: # then we have time to parse the request
+			url = request['repository']['url']
+			ref = request['ref']
 			paths = self.getMatchingPaths(url, ref)
 			for path in paths:
 				git_pull_output = self.pull(path)
 				deploy_output = self.deploy(path)
 				if self.is_gmail_enabled():
-					self.send_gmail(response, path, git_pull_output, deploy_output)
+					self.send_gmail(request, path, git_pull_output, deploy_output)
 
-		self.respond()
 
 	def parseRequest(self):
 		length = int(self.headers.getheader('content-length'))
@@ -85,6 +85,7 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 		self.send_header("Content-length", str(len(message)))
 		self.end_headers()
 		self.wfile.write(message)
+		self.wfile.close()
 
 	def pull(self, path):
 		if(not self.quiet):
@@ -111,17 +112,17 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 	def is_gmail_enabled(self):
 		return 'gmail' in self.getConfig().keys()
 
-	def send_gmail(self, response, path, git_pull_output, deploy_output):
+	def send_gmail(self, request, path, git_pull_output, deploy_output):
 		import smtplib
 		import socket
 
 		config = self.getConfig()
 		gmail_config = config['gmail']
 
-		url = response['repository']['url']
-		commits = response['commits']
-		push_user = response['user_name']
-		repo_name = response['repository']['name']
+		url = request['repository']['url']
+		commits = request['commits']
+		push_user = request['user_name']
+		repo_name = request['repository']['name']
 
 		message  = "From: %s\n" % gmail_config['username']
 		message += "To: %s\n" % (", ".join(gmail_config['recipients']))
