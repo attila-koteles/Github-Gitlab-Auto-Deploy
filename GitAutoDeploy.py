@@ -40,8 +40,8 @@ class GitAutoDeploy(BaseHTTPRequestHandler):
 			ref = request['ref']
 			paths = self.getMatchingPaths(url, ref)
 			for path in paths:
-				git_pull_output = self.pull(path)
-				deploy_output = self.deploy(path)
+				git_pull_output = self.pull(path).decode('utf-8')
+				deploy_output = self.deploy(path).decode('utf-8')
 				if self.is_gmail_enabled():
 					self.send_gmail(request, path, git_pull_output, deploy_output)
 
